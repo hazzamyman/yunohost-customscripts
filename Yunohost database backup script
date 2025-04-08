@@ -1,0 +1,29 @@
+###This script backups the MYSQL databases in Yunohost to my synology nas which is mounted via NFS.
+#I run this once a month and then back that up to third storage
+
+#!/bin/bash
+
+DATE=$(date +"%Y-%m-%d_%H-%M-%S")
+BACKUP_DIR="/mnt/backups/mysql"
+LOG_FILE="/var/log/mysql_backup.log"
+PASSWORD=$(sudo cat /etc/yunohost/mysql)
+
+mkdir -p "$BACKUP_DIR"
+
+echo "[$DATE] Starting full MySQL backup..." >> "$LOG_FILE"
+
+mysqldump -uroot -p"$PASSWORD" \
+  --single-transaction \
+  --default-character-set=utf8 \
+  --events \
+  --ignore-table=mysql.event \
+  --all-databases \
+  | gzip > "${BACKUP_DIR}/all_databases_${DATE}.sql.gz"
+
+if [ $? -eq 0 ]; then
+  echo "[$DATE] Backup successful." >> "$LOG_FILE"
+else
+  echo "[$DATE] ERROR: Backup failed!" >> "$LOG_FILE"
+fi
+
+echo "----------------------------------------" >> "$LOG_FILE"
