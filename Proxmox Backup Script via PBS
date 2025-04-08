@@ -1,0 +1,53 @@
+#I have this run once a day on my Proxmox Backup Server
+#WoL wakes up my sever at 2:55, Backup jobs run from 3 until about 4:30. THis job then runs and turns PBS off
+
+#!/bin/bash
+
+LOG_FILE="/var/log/proxmox_backup_maintenance.log"
+DATASTORE="Tank"
+CURRENT_TIME=$(date +%s)  # Get the current Unix epoch time
+DATE=$(date '+%Y-%m-%d %H:%M:%S')
+
+log_task() {
+    echo "$DATE - $1" | tee -a "$LOG_FILE"
+}
+
+# Function to check if a task of a specific type has already run today
+has_task_run_today() {
+    TASK_TYPE=$1
+    proxmox-backup-manager task list --all --output-format json \
+        | jq -r --arg task "$TASK_TYPE" --arg date "$(date '+%Y-%m-%d')" '
+            .[] | select(.type == $task and (.starttime | strftime("%Y-%m-%d") == $date)) | .upid' \
+        | grep -q .
+}
+
+log_task "===== Starting Backup Maintenance ====="
+
+# Run Prune if it hasn’t run today
+if has_task_run_today "prunejob"; then
+    log_task "🟢 Prune already ran today. Skipping."
+else
+    log_task "🟠 Running Prune..."
+    proxmox-backup-manager prune run s-535a3968-907b
+    log_task "✅ Prune completed."
+fi
+
+# Run Garbage Collection if it hasn’t run today
+if has_task_run_today "garbage_collection"; then
+    log_task "🟢 Garbage Collection already ran today. Skipping."
+else
+    log_task "🟠 Running Garbage Collection..."
+    proxmox-backup-manager garbage-collect start "$DATASTORE"
+    log_task "✅ Garbage Collection completed."
+fi
+
+# Run Verify if it hasn’t run today
+if has_task_run_today "verify"; then
+    log_task "🟢 Verify already ran today. Skipping."
+else
+    log_task "🟠 Running Verify..."
+    proxmox-backup-manager verify "$DATASTORE"
+    log_task "✅ Verify completed."
+fi
+
+log_task "===== Backup Maintenance Finished ====="
